@@ -1232,6 +1232,14 @@ function hideUploadProgress() {
 async function uploadPdfToSupabase(file, bookId) {
   const ext = 'pdf';
   const fileName = `${bookId}_${Date.now()}.${ext}`;
+  const fileMB = file.size / 1024 / 1024;
+
+  // Supabase Free 默认限制 50MB，超过时提示用户在 Dashboard 调大限制
+  if (fileMB > 50) {
+    const ok = confirm(`文件大小 ${fileMB.toFixed(1)} MB，超过 Supabase 默认 50MB 限制。\n\n请先到 Supabase → Storage → 设置 → 将 "File size limit" 改为 200MB 或更大，否则上传会失败。\n\n已调好了？点确定继续上传。`);
+    if (!ok) return null;
+  }
+
   showUploadProgress(file.name);
 
   // 模拟进度（Supabase JS 不支持上传进度，用定时器模拟）
@@ -1248,13 +1256,16 @@ async function uploadPdfToSupabase(file, bookId) {
   }, 400);
 
   try {
-    // 30 秒超时保护
+    // 根据文件大小动态设置超时（至少5分钟，每10MB追加1分钟，最长30分钟）
+    const fileMB = file.size / 1024 / 1024;
+    const timeoutMs = Math.min(Math.max(5 * 60000, Math.ceil(fileMB / 10) * 60000), 30 * 60000);
+
     const uploadPromise = _supabase.storage
       .from(BUCKET_NAME)
       .upload(fileName, file, { contentType: 'application/pdf', upsert: true });
 
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('上传超时，请检查网络或文件大小')), 60000)
+      setTimeout(() => reject(new Error(`上传超时（${Math.round(timeoutMs/60000)}分钟），请检查网络或换用更小的文件`)), timeoutMs)
     );
 
     const { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
