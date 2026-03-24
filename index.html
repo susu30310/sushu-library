@@ -858,21 +858,9 @@
     <!-- 文件 -->
     <div class="form-section-title">电子书文件</div>
     <div class="form-section">
-      <div class="form-row" onclick="chooseFile()">
-        <span class="form-label">选择文件</span>
-        <div class="file-upload-btn" id="fileUploadBtn">
-          <span id="fileNameDisplay" style="display:none" class="file-name-tag"></span>
-          <span id="fileTypeBadge" style="display:none" class="file-type-badge"></span>
-          <span id="fileUploadText">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="vertical-align:middle">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            上传
-          </span>
-        </div>
-        <input type="file" id="bookFileInput" accept=".pdf,.doc,.docx" style="display:none" onchange="onFileSelected(this)">
+      <div class="form-row">
+        <span class="form-label">PDF 链接</span>
+        <input class="form-input" id="fileUrlInput" type="url" placeholder="粘贴 PDF 直链（永久有效）" style="font-size:13px">
       </div>
     </div>
 
@@ -1248,16 +1236,14 @@ function renderBookshelf() {
 function goAddBook() {
   // reset form
   document.getElementById('titleInput').value = '';
+  document.getElementById('fileUrlInput').value = '';
   document.getElementById('coverPreview').style.display = 'none';
   document.getElementById('coverPlaceholder').style.display = 'flex';
-  document.getElementById('fileNameDisplay').style.display = 'none';
-  document.getElementById('fileTypeBadge').style.display = 'none';
-  document.getElementById('fileUploadText').style.display = '';
   document.getElementById('startTimeDisplay').textContent = formatDate(new Date());
   document.getElementById('startTimeDisplay').className = 'form-value has-value';
   document.getElementById('finishTimeDisplay').textContent = '未完成';
   document.getElementById('finishTimeDisplay').className = 'form-value';
-  window._addBookState = { coverUrl: '', fileName: '', fileType: '', startTime: formatDate(new Date()), finishTime: '' };
+  window._addBookState = { coverUrl: '', startTime: formatDate(new Date()), finishTime: '' };
   showPage('add-book');
 }
 
@@ -1632,24 +1618,22 @@ function saveBook() {
   if (!title) { showToast('请输入书名'); return; }
   const state = window._addBookState || {};
   if (!state.startTime) { showToast('请选择开始阅读时间'); return; }
+  const fileUrl = (document.getElementById('fileUrlInput').value || '').trim();
 
   const books = getBooks();
   const newBook = {
     id: Date.now().toString(),
     title,
     coverUrl: state.coverUrl || '',
-    fileName: state.fileName || '',
-    fileType: state.fileType || '',
+    fileUrl: fileUrl,
     startTime: state.startTime,
     finishTime: state.finishTime || '',
     createTime: formatDateTime(new Date())
-    // 注意：fileData 不存入 localStorage（文件太大会超出5MB限制）
   };
   books.unshift(newBook);
   try {
     saveBooks(books);
   } catch(e) {
-    // 如果封面图片太大也可能超限，尝试不保存封面
     newBook.coverUrl = '';
     books[0] = newBook;
     try {
@@ -1660,11 +1644,6 @@ function saveBook() {
     }
   }
   showToast('添加成功 ✓');
-  // 将文件数据关联到bookId（仅本次会话有效，不存localStorage）
-  if (state._tempFileData) {
-    if (!window._sessionFileData) window._sessionFileData = {};
-    window._sessionFileData[newBook.id] = state._tempFileData;
-  }
   setTimeout(() => {
     showPage('bookshelf'); renderBookshelf();
     pushSync();
