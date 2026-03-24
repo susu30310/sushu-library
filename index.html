@@ -906,7 +906,7 @@
           </svg>
           <div style="flex:1">
             <div style="font-size:15px;font-weight:600;color:#667eea" id="pdfUploadText">点击上传 PDF 文件</div>
-            <div style="font-size:12px;color:#8e8e93;margin-top:2px">上传后永久保存，随时阅读</div>
+            <div style="font-size:12px;color:#8e8e93;margin-top:2px">上传到 GitHub，永久保存，最大 2GB</div>
           </div>
           <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="onAddBookPdfSelected(this)">
         </label>
@@ -1115,24 +1115,50 @@
 <div class="modal-mask" id="syncModal" onclick="onSyncMaskClick(event)">
   <div class="sync-modal-panel">
     <div class="sync-modal-header">
-      <span class="sync-modal-title">📡 数据同步</span>
+      <span class="sync-modal-title">📡 数据同步 &amp; 存储</span>
       <button class="sync-modal-close" onclick="closeSyncModal()">关闭</button>
     </div>
 
-    <!-- 未启用同步 -->
+    <!-- ① GitHub Release PDF 存储配置 -->
+    <div class="sync-section" style="border-bottom:.5px solid rgba(0,0,0,.06);padding-bottom:20px">
+      <div class="sync-section-title">📂 PDF 云存储（GitHub Release）</div>
+      <div id="ghStorageSetup">
+        <div class="sync-guide">
+          将 PDF 文件上传到你的 <strong>GitHub 仓库 Release</strong>，免费无限空间，单文件最大 <strong>2 GB</strong>。<br>
+          需要一个拥有 <strong>repo</strong> 权限的
+          <a href="https://github.com/settings/tokens/new?scopes=repo&description=苏苏书房PDF存储" target="_blank">GitHub Token（点击创建）</a>。
+        </div>
+        <input class="sync-input" id="ghTokenInput" type="password" placeholder="GitHub Token（ghp_xxx...）">
+        <input class="sync-input" id="ghRepoInput" type="text" placeholder="仓库名，如 susu30310/sushu-library">
+        <button class="sync-btn sync-btn-primary" onclick="saveGhConfig()">保存配置</button>
+      </div>
+      <div id="ghStorageActive" style="display:none">
+        <div class="sync-status-badge">
+          <div class="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#34c759;flex-shrink:0"></div>
+          <span id="ghStorageStatusText">PDF 存储已配置</span>
+        </div>
+        <div class="sync-code-box">
+          <div>
+            <div class="sync-code-label">仓库</div>
+            <div class="sync-code-value" id="ghRepoDisplay" style="font-size:14px"></div>
+          </div>
+          <button class="sync-copy-btn" style="background:#ff3b30" onclick="clearGhConfig()">清除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ② Gist 书单/笔记同步 -->
     <div id="syncSetupSection">
       <div class="sync-section">
+        <div class="sync-section-title">🔄 书单 &amp; 笔记同步（GitHub Gist）</div>
         <div class="sync-guide">
-          通过 <strong>GitHub Gist</strong> 免费实现手机与电脑数据互通。<br>
-          需要一个 <a href="https://github.com/settings/tokens/new?scopes=gist&description=苏苏书房同步" target="_blank">GitHub Token（点击创建）</a>，仅需 <strong>gist</strong> 权限。
+          同步书单和笔记到 <strong>GitHub Gist</strong>，多设备共享。<br>
+          需要一个 <a href="https://github.com/settings/tokens/new?scopes=gist&description=苏苏书房同步" target="_blank">GitHub Token（仅需 gist 权限）</a>。
         </div>
-
         <div class="sync-section-title">方式一：首次创建同步</div>
         <input class="sync-input" id="githubTokenInput" type="password" placeholder="粘贴 GitHub Token（ghp_xxx...）">
         <button class="sync-btn sync-btn-primary" onclick="setupNewSync()">创建同步并生成同步码</button>
-
         <div class="sync-divider">— 或 —</div>
-
         <div class="sync-section-title">方式二：已有同步码（其他设备连接）</div>
         <input class="sync-input" id="existingGistInput" type="text" placeholder="粘贴同步码">
         <button class="sync-btn sync-btn-secondary" onclick="connectExistingGist()">连接已有同步</button>
@@ -1205,15 +1231,22 @@
   <div class="reader-body" id="readerBody"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 /* ================================================
-   SUPABASE CONFIG
+   GITHUB RELEASE 存储配置
+   用户需在「同步」面板里填写 Token + 仓库信息
 ================================================ */
-const SUPABASE_URL = 'https://xuzcwjuzjzgssnfqebuw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1emN3anV6anpnc3NuZnFlYnV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNDM4MTYsImV4cCI6MjA4OTkxOTgxNn0.SNtd8yICNWN_i2bejlNzI3xzUWkj6C18ALGeSVrhug8';
-const BUCKET_NAME = 'books';
-const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const GH_TOKEN_KEY    = 'sss_gh_token';      // GitHub Personal Access Token
+const GH_REPO_KEY     = 'sss_gh_repo';       // owner/repo，如 susu30310/sushu-library
+const GH_RELEASE_KEY  = 'sss_gh_release_id'; // 复用同一个 Release 存所有 PDF
+
+function getGhConfig() {
+  return {
+    token : localStorage.getItem(GH_TOKEN_KEY)   || '',
+    repo  : localStorage.getItem(GH_REPO_KEY)    || '',
+    relId : localStorage.getItem(GH_RELEASE_KEY) || ''
+  };
+}
 
 /* ================================================
    UPLOAD HELPERS
@@ -1227,16 +1260,14 @@ function showUploadProgress(filename) {
   document.getElementById('uploadProgressMask').classList.add('show');
 }
 function setUploadProgress(pct, speed, chunkInfo) {
-  document.getElementById('uploadBar').style.width = pct + '%';
-  document.getElementById('uploadPercent').textContent = Math.round(pct) + '%';
-  if (speed) document.getElementById('uploadSpeed').textContent = speed;
-  if (chunkInfo) document.getElementById('uploadChunk').textContent = chunkInfo;
+  document.getElementById('uploadBar').style.width = Math.min(pct, 100) + '%';
+  document.getElementById('uploadPercent').textContent = Math.round(Math.min(pct, 100)) + '%';
+  if (speed !== undefined) document.getElementById('uploadSpeed').textContent = speed;
+  if (chunkInfo !== undefined) document.getElementById('uploadChunk').textContent = chunkInfo;
 }
 function hideUploadProgress() {
   document.getElementById('uploadProgressMask').classList.remove('show');
 }
-
-/* 格式化字节速度 */
 function fmtSpeed(bytesPerSec) {
   if (bytesPerSec > 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + ' MB/s';
   if (bytesPerSec > 1024) return (bytesPerSec / 1024).toFixed(0) + ' KB/s';
@@ -1244,181 +1275,164 @@ function fmtSpeed(bytesPerSec) {
 }
 
 /* ================================================
-   分片上传到 Supabase Storage
-   - 每片 CHUNK_SIZE（默认 5MB）
-   - 直接上传每个分片为独立文件，最后拼接 URL 或
-     使用单文件上传（对大文件用 fetch 流式上传）
+   GITHUB RELEASE 上传 PDF
+   流程：
+   1. 检查本地是否已有 Release ID → 没有则创建
+   2. 用 XHR 上传文件到 Release Assets（支持真实进度）
+   3. 返回文件的 browser_download_url
 ================================================ */
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
-
 async function uploadPdfToSupabase(file, bookId) {
-  const ext = 'pdf';
-  const baseFileName = `${bookId}_${Date.now()}`;
-  const fileMB = file.size / 1024 / 1024;
+  // 函数名保留兼容性，实际上传到 GitHub Release
+  return await uploadPdfToGithub(file, bookId);
+}
+
+async function uploadPdfToGithub(file, bookId) {
+  const cfg = getGhConfig();
+  if (!cfg.token || !cfg.repo) {
+    showToast('请先在「同步」面板配置 GitHub Token 和仓库');
+    // 打开配置面板
+    showSyncModal();
+    return null;
+  }
 
   showUploadProgress(file.name);
-
-  // 小文件（≤ 50MB）直接单次上传
-  if (file.size <= 50 * 1024 * 1024) {
-    return await _uploadSingleFile(file, `${baseFileName}.${ext}`);
-  }
-
-  // 大文件：分片上传
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-  const chunkPaths = [];
-  let uploadedBytes = 0;
-  let startTime = Date.now();
-
-  setUploadProgress(0, '', `准备分片上传（共 ${totalChunks} 片）`);
-
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
-    const chunk = file.slice(start, end);
-    const chunkName = `${baseFileName}_part${String(i).padStart(4, '0')}.part`;
-
-    // 上传单片，最多重试 3 次
-    let success = false;
-    for (let retry = 0; retry < 3; retry++) {
-      try {
-        const { error } = await _supabase.storage
-          .from(BUCKET_NAME)
-          .upload(chunkName, chunk, { contentType: 'application/octet-stream', upsert: true });
-        if (error) throw error;
-        success = true;
-        break;
-      } catch (e) {
-        if (retry === 2) {
-          hideUploadProgress();
-          showToast(`第 ${i + 1} 片上传失败：${e.message || '请重试'}`);
-          // 清理已上传的分片
-          _cleanupChunks(chunkPaths);
-          return null;
-        }
-        await new Promise(r => setTimeout(r, 1500 * (retry + 1)));
-      }
-    }
-
-    chunkPaths.push(chunkName);
-    uploadedBytes += (end - start);
-    const elapsed = (Date.now() - startTime) / 1000;
-    const speed = elapsed > 0 ? fmtSpeed(uploadedBytes / elapsed) : '';
-    const pct = (uploadedBytes / file.size) * 95; // 留5%给合并
-    setUploadProgress(pct, speed, `已上传 ${i + 1} / ${totalChunks} 片`);
-  }
-
-  // 所有分片上传完成，合并：将各分片读取后拼接成完整文件再上传
-  setUploadProgress(96, '', '正在合并分片...');
-  const finalFileName = `${baseFileName}.${ext}`;
+  setUploadProgress(0, '', '准备上传...');
 
   try {
-    // 下载所有分片并在内存中拼接
-    const buffers = [];
-    for (let i = 0; i < chunkPaths.length; i++) {
-      const { data, error } = await _supabase.storage
-        .from(BUCKET_NAME)
-        .download(chunkPaths[i]);
-      if (error) throw error;
-      buffers.push(await data.arrayBuffer());
-      setUploadProgress(96 + (i / chunkPaths.length) * 2, '', `合并中 ${i + 1}/${chunkPaths.length}...`);
+    // Step 1: 获取或创建 Release
+    const releaseId = await _ensureRelease(cfg);
+    if (!releaseId) {
+      hideUploadProgress();
+      showToast('创建 Release 失败，请检查 Token 和仓库权限');
+      return null;
     }
 
-    // 合并为完整 Blob
-    const mergedBlob = new Blob(buffers, { type: 'application/pdf' });
-    setUploadProgress(98, '', '上传合并后的文件...');
-
-    const { error: mergeErr } = await _supabase.storage
-      .from(BUCKET_NAME)
-      .upload(finalFileName, mergedBlob, { contentType: 'application/pdf', upsert: true });
-
-    if (mergeErr) throw mergeErr;
-
-    // 清理分片
-    _cleanupChunks(chunkPaths);
-
-    setUploadProgress(100, '', '上传完成 ✓');
-    await new Promise(r => setTimeout(r, 600));
-    hideUploadProgress();
-
-    const { data: urlData } = _supabase.storage.from(BUCKET_NAME).getPublicUrl(finalFileName);
-    return urlData.publicUrl;
+    // Step 2: 上传文件（XHR 支持进度）
+    setUploadProgress(2, '', '开始上传...');
+    const safeFileName = `${bookId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const downloadUrl = await _uploadAssetXHR(cfg, releaseId, file, safeFileName);
+    return downloadUrl;
 
   } catch (e) {
     hideUploadProgress();
-    showToast('合并失败：' + (e.message || '请重试'));
-    _cleanupChunks(chunkPaths);
+    console.error('GitHub upload error:', e);
+    showToast('上传失败：' + (e.message || '请重试'));
     return null;
   }
 }
 
-/* 单文件直接上传（≤50MB） */
-async function _uploadSingleFile(file, fileName) {
-  const startTime = Date.now();
-  // 用 XMLHttpRequest 实现真实进度
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      // 转为 ArrayBuffer 再用 fetch 上传，通过 XHR 监听进度
-      const arrayBuffer = e.target.result;
-      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+/* 确保存在一个用于存储书籍 PDF 的 Release，返回 release id */
+async function _ensureRelease(cfg) {
+  // 先用本地缓存的 release id 验证
+  if (cfg.relId) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${cfg.repo}/releases/${cfg.relId}`, {
+        headers: { 'Authorization': `token ${cfg.token}`, 'Accept': 'application/vnd.github+json' }
+      });
+      if (r.ok) return cfg.relId;
+    } catch(e) {}
+  }
 
-      // 获取 Supabase 上传 URL
-      const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${fileName}`;
-      const xhr = new XMLHttpRequest();
+  // 查找已有的「苏苏书房」Release
+  const listRes = await fetch(`https://api.github.com/repos/${cfg.repo}/releases?per_page=20`, {
+    headers: { 'Authorization': `token ${cfg.token}`, 'Accept': 'application/vnd.github+json' }
+  });
+  if (listRes.ok) {
+    const releases = await listRes.json();
+    const exist = releases.find(r => r.tag_name === 'sushu-books');
+    if (exist) {
+      localStorage.setItem(GH_RELEASE_KEY, String(exist.id));
+      return String(exist.id);
+    }
+  }
 
-      xhr.upload.onprogress = (ev) => {
-        if (ev.lengthComputable) {
-          const pct = (ev.loaded / ev.total) * 100;
-          const elapsed = (Date.now() - startTime) / 1000;
-          const speed = elapsed > 0 ? fmtSpeed(ev.loaded / elapsed) : '';
-          setUploadProgress(pct, speed, '');
-        }
-      };
+  // 创建新 Release
+  const createRes = await fetch(`https://api.github.com/repos/${cfg.repo}/releases`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `token ${cfg.token}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      tag_name: 'sushu-books',
+      name: '苏苏书房 - 书籍文件',
+      body: '此 Release 用于存储苏苏书房的 PDF 书籍文件，请勿删除。',
+      draft: false,
+      prerelease: false
+    })
+  });
+  if (!createRes.ok) {
+    const errBody = await createRes.json().catch(() => ({}));
+    throw new Error(errBody.message || `创建 Release 失败(${createRes.status})`);
+  }
+  const created = await createRes.json();
+  localStorage.setItem(GH_RELEASE_KEY, String(created.id));
+  return String(created.id);
+}
 
-      xhr.onload = () => {
-        if (xhr.status === 200 || xhr.status === 201) {
-          setUploadProgress(100, '', '');
-          setTimeout(() => {
-            hideUploadProgress();
-            const { data: urlData } = _supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
-            resolve(urlData.publicUrl);
-          }, 500);
-        } else {
-          hideUploadProgress();
-          let errMsg = '上传失败';
-          try { errMsg = JSON.parse(xhr.responseText).message || errMsg; } catch(ex) {}
-          showToast(errMsg);
-          resolve(null);
-        }
-      };
+/* 用 XHR 上传文件到 Release，支持真实进度条 */
+function _uploadAssetXHR(cfg, releaseId, file, fileName) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const uploadUrl =
+      `https://uploads.github.com/repos/${cfg.repo}/releases/${releaseId}/assets?name=${encodeURIComponent(fileName)}`;
 
-      xhr.onerror = () => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) {
+        const pct = 2 + (ev.loaded / ev.total) * 96;
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = elapsed > 0.5 ? fmtSpeed(ev.loaded / elapsed) : '';
+        const mb = (ev.loaded / 1024 / 1024).toFixed(1);
+        const total = (ev.total / 1024 / 1024).toFixed(1);
+        setUploadProgress(pct, speed, `${mb} / ${total} MB`);
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status === 201) {
+        setUploadProgress(100, '', '上传完成 ✓');
+        await new Promise(r => setTimeout(r, 600));
         hideUploadProgress();
-        showToast('网络错误，请重试');
-        resolve(null);
-      };
+        try {
+          const asset = JSON.parse(xhr.responseText);
+          resolve(asset.browser_download_url);
+        } catch(e) { reject(new Error('解析响应失败')); }
+      } else {
+        hideUploadProgress();
+        let msg = `上传失败 (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).message || msg; } catch(ex) {}
+        // 413 说明文件太大（GitHub Release 单文件上限 2GB，一般不会触发）
+        if (xhr.status === 422) msg = '文件名已存在或参数错误，请重试';
+        showToast(msg);
+        reject(new Error(msg));
+      }
+    };
 
-      xhr.open('POST', uploadUrl);
-      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
-      xhr.setRequestHeader('x-upsert', 'true');
-      xhr.send(blob);
-    };
-    reader.onerror = () => {
+    xhr.onerror = () => {
       hideUploadProgress();
-      showToast('文件读取失败');
-      resolve(null);
+      reject(new Error('网络错误，请检查网络后重试'));
     };
-    reader.readAsArrayBuffer(file);
+
+    xhr.ontimeout = () => {
+      hideUploadProgress();
+      reject(new Error('上传超时，请重试'));
+    };
+
+    xhr.timeout = 60 * 60 * 1000; // 最长 1 小时
+    xhr.open('POST', uploadUrl);
+    xhr.setRequestHeader('Authorization', `token ${cfg.token}`);
+    xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+    xhr.setRequestHeader('Content-Type', 'application/pdf');
+    xhr.send(file);
   });
 }
 
-/* 异步清理分片（不影响主流程） */
-async function _cleanupChunks(paths) {
-  if (!paths || paths.length === 0) return;
-  try {
-    await _supabase.storage.from(BUCKET_NAME).remove(paths);
-  } catch(e) { /* 忽略清理错误 */ }
-}
+/* 异步清理（兼容旧代码调用，此处为空操作） */
+async function _cleanupChunks() {}
+const CHUNK_SIZE = 5 * 1024 * 1024;
 
 /* ================================================
    ADD BOOK: PDF 选择与上传
@@ -1678,7 +1692,7 @@ function openReader(bookId) {
 
         <div style="width:100%;max-width:320px;margin-top:24px">
           <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:8px;text-align:left">
-            方式一：上传 PDF 到云端（永久保存）
+            方式一：上传 PDF 到 GitHub（永久保存）
           </div>
           <label style="
             display:flex;align-items:center;gap:10px;width:100%;
@@ -1692,8 +1706,8 @@ function openReader(bookId) {
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
             <div style="flex:1">
-              <div style="font-size:14px;font-weight:600;color:#a78bfa">上传 PDF 到云端</div>
-              <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px">上传后永久保存，随时阅读</div>
+              <div style="font-size:14px;font-weight:600;color:#a78bfa">上传 PDF 到 GitHub</div>
+              <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px">上传后永久保存，随时阅读（最大 2GB）</div>
             </div>
             <input type="file" accept=".pdf" style="display:none" onchange="onReaderUploadToCloud(this,'${bookId}')">
           </label>
@@ -1779,6 +1793,47 @@ function getDeviceId() {
   return id;
 }
 
+/* ================================================
+   GITHUB RELEASE 存储配置 UI
+================================================ */
+function saveGhConfig() {
+  const token = document.getElementById('ghTokenInput').value.trim();
+  const repo  = document.getElementById('ghRepoInput').value.trim();
+  if (!token) { showToast('请输入 GitHub Token'); return; }
+  if (!repo || !repo.includes('/')) { showToast('请输入正确的仓库名，如 user/repo'); return; }
+  localStorage.setItem(GH_TOKEN_KEY, token);
+  localStorage.setItem(GH_REPO_KEY, repo);
+  localStorage.removeItem(GH_RELEASE_KEY); // 清除旧 release 缓存
+  _renderGhStorageStatus();
+  showToast('配置已保存 ✓');
+}
+
+function clearGhConfig() {
+  localStorage.removeItem(GH_TOKEN_KEY);
+  localStorage.removeItem(GH_REPO_KEY);
+  localStorage.removeItem(GH_RELEASE_KEY);
+  _renderGhStorageStatus();
+  showToast('已清除配置');
+}
+
+function _renderGhStorageStatus() {
+  const cfg = getGhConfig();
+  const setup  = document.getElementById('ghStorageSetup');
+  const active = document.getElementById('ghStorageActive');
+  if (!setup || !active) return;
+  if (cfg.token && cfg.repo) {
+    setup.style.display  = 'none';
+    active.style.display = 'block';
+    document.getElementById('ghRepoDisplay').textContent = cfg.repo;
+  } else {
+    setup.style.display  = 'block';
+    active.style.display = 'none';
+    // 预填仓库名
+    const repoInput = document.getElementById('ghRepoInput');
+    if (repoInput && !repoInput.value) repoInput.value = cfg.repo || '';
+  }
+}
+
 // 显示同步设置界面
 function showSyncModal() {
   const gistId = localStorage.getItem(SYNC_KEY);
@@ -1792,6 +1847,7 @@ function showSyncModal() {
     document.getElementById('syncSetupSection').style.display = 'block';
     document.getElementById('syncActiveSection').style.display = 'none';
   }
+  _renderGhStorageStatus();
   modal.classList.add('show');
 }
 
