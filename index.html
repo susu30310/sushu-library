@@ -10,7 +10,7 @@
     html, body { width: 100%; height: 100%; min-height: 100vh; overflow: hidden; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
-      background: #f2f1f6;
+      background: #24243e;
       color: #1c1c1e;
       -webkit-tap-highlight-color: transparent;
     }
@@ -35,9 +35,10 @@
        SPLASH PAGE
     ======================================== */
     #page-splash {
-      background: linear-gradient(160deg, #0f0c29, #302b63, #24243e);
+      background: linear-gradient(160deg, #0f0c29, #302b63, #24243e) !important;
       align-items: center; justify-content: center;
-      position: fixed; inset: 0; width: 100%; height: 100vh;
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      width: 100vw; height: 100vh;
       overflow: hidden;
     }
     .splash-particles {
@@ -135,15 +136,17 @@
     }
     .book-item {
       display: flex; flex-direction: column; align-items: center;
-      cursor: pointer;
     }
     .book-cover-wrap {
       width: 100%; aspect-ratio: 3/4;
       border-radius: 6px; overflow: hidden;
       box-shadow: 3px 4px 16px rgba(0,0,0,.22), -1px 0 0 rgba(0,0,0,.08);
       position: relative; transition: transform .2s;
+      cursor: pointer;
     }
-    .book-item:active .book-cover-wrap { transform: scale(.96) translateY(2px); }
+    .book-cover-wrap:active { transform: scale(.96) translateY(2px); }
+    .book-info { cursor: pointer; }
+    .book-info:active .book-name { color: #007aff; }
     .book-cover-img { width: 100%; height: 100%; object-fit: cover; }
     .book-cover-default {
       width: 100%; height: 100%;
@@ -631,6 +634,108 @@
       font-size: 12px; color: #c7c7cc; text-align: center;
       padding: 4px 0 0; display: none;
     }
+
+    /* ========================================
+       READER PAGE
+    ======================================== */
+    #page-reader { background: #1a1a2e; }
+    .reader-header {
+      background: rgba(26,26,46,.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: .5px solid rgba(255,255,255,.08);
+      flex-shrink: 0;
+    }
+    .reader-header .navbar-title { color: #fff; }
+    .reader-header .navbar-btn { color: rgba(255,255,255,.85); }
+    .reader-body {
+      flex: 1; overflow: hidden; position: relative;
+      display: flex; flex-direction: column;
+    }
+    .reader-iframe {
+      flex: 1; width: 100%; border: none;
+      background: #fff;
+    }
+    .reader-no-file {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: rgba(255,255,255,.6); text-align: center; padding: 40px;
+    }
+    .reader-no-file .no-file-icon { font-size: 64px; margin-bottom: 20px; opacity: .7; }
+    .reader-no-file .no-file-title { font-size: 18px; font-weight: 600; margin-bottom: 10px; color: rgba(255,255,255,.85); }
+    .reader-no-file .no-file-desc { font-size: 14px; line-height: 1.7; }
+    .reader-no-file .no-file-hint {
+      margin-top: 24px; padding: 12px 24px;
+      background: rgba(255,255,255,.1); border-radius: 12px;
+      font-size: 13px; color: rgba(255,255,255,.5);
+    }
+
+    /* PC端同步状态栏 */
+    .sync-bar {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 36px; background: linear-gradient(90deg, #1c1c3a, #2d2b55);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      font-size: 12px; color: rgba(255,255,255,.7);
+      z-index: 500; transform: translateY(-100%);
+      transition: transform .3s;
+    }
+    .sync-bar.show { transform: translateY(0); }
+    .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; flex-shrink: 0; }
+    .sync-dot.syncing { background: #ff9500; animation: pulse .8s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    /* 同步 Modal */
+    .sync-modal-panel {
+      width: 100%; background: #f2f1f6;
+      border-radius: 20px 20px 0 0;
+      padding-bottom: env(safe-area-inset-bottom, 24px);
+      animation: slide-up .3s ease;
+      max-height: 85vh; overflow-y: auto;
+    }
+    .sync-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 12px;
+      border-bottom: .5px solid rgba(0,0,0,.08);
+    }
+    .sync-modal-title { font-size: 17px; font-weight: 700; color: #1c1c1e; }
+    .sync-modal-close { font-size: 15px; color: #8e8e93; padding: 4px 8px; }
+    .sync-section { padding: 16px 20px; }
+    .sync-section-title { font-size: 12px; color: #8e8e93; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+    .sync-input {
+      width: 100%; padding: 12px 14px; border-radius: 12px;
+      background: #fff; font-size: 15px; color: #1c1c1e;
+      border: 1px solid #e5e5ea; margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .sync-input::placeholder { color: #c7c7cc; }
+    .sync-btn {
+      display: block; width: 100%; padding: 14px;
+      border-radius: 12px; font-size: 15px; font-weight: 600;
+      text-align: center; margin-bottom: 8px;
+      transition: opacity .15s, transform .15s;
+    }
+    .sync-btn:active { opacity: .8; transform: scale(.98); }
+    .sync-btn-primary { background: linear-gradient(135deg, #1c1c3a, #2d2b55); color: #fff; }
+    .sync-btn-secondary { background: rgba(0,122,255,.1); color: #007aff; }
+    .sync-btn-danger { background: rgba(255,59,48,.1); color: #ff3b30; margin-top: 4px; }
+    .sync-code-box {
+      background: #fff; border-radius: 12px; padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; border: 1px solid #e5e5ea;
+    }
+    .sync-code-label { font-size: 12px; color: #8e8e93; margin-bottom: 4px; }
+    .sync-code-value { font-size: 13px; color: #1c1c1e; font-family: monospace; word-break: break-all; flex: 1; }
+    .sync-copy-btn { padding: 6px 12px; background: #007aff; color: #fff; border-radius: 8px; font-size: 13px; font-weight: 600; flex-shrink: 0; margin-left: 10px; }
+    .sync-status-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; color: #34c759; margin-bottom: 14px;
+    }
+    .sync-status-badge .sync-dot { background: #34c759; }
+    .sync-guide {
+      background: #fff; border-radius: 12px; padding: 14px 16px;
+      margin-bottom: 10px; font-size: 13px; color: #636366; line-height: 1.7;
+    }
+    .sync-guide a { color: #007aff; text-decoration: none; }
+    .sync-divider { text-align: center; font-size: 13px; color: #c7c7cc; margin: 4px 0 10px; }
   </style>
 </head>
 <body>
@@ -671,6 +776,14 @@
     <div class="safe-top"></div>
     <div class="navbar">
       <div class="navbar-title"></div>
+      <button class="navbar-btn navbar-right" onclick="showSyncModal()" style="gap:5px" title="数据同步">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+        同步
+      </button>
     </div>
     <div class="bookshelf-title-row">
       <div class="bookshelf-main-title">苏苏的书房</div>
@@ -924,8 +1037,84 @@
   </div>
 </div>
 
+<!-- ==================== SYNC MODAL ==================== -->
+<div class="modal-mask" id="syncModal" onclick="onSyncMaskClick(event)">
+  <div class="sync-modal-panel">
+    <div class="sync-modal-header">
+      <span class="sync-modal-title">📡 数据同步</span>
+      <button class="sync-modal-close" onclick="closeSyncModal()">关闭</button>
+    </div>
+
+    <!-- 未启用同步 -->
+    <div id="syncSetupSection">
+      <div class="sync-section">
+        <div class="sync-guide">
+          通过 <strong>GitHub Gist</strong> 免费实现手机与电脑数据互通。<br>
+          需要一个 <a href="https://github.com/settings/tokens/new?scopes=gist&description=苏苏书房同步" target="_blank">GitHub Token（点击创建）</a>，仅需 <strong>gist</strong> 权限。
+        </div>
+
+        <div class="sync-section-title">方式一：首次创建同步</div>
+        <input class="sync-input" id="githubTokenInput" type="password" placeholder="粘贴 GitHub Token（ghp_xxx...）">
+        <button class="sync-btn sync-btn-primary" onclick="setupNewSync()">创建同步并生成同步码</button>
+
+        <div class="sync-divider">— 或 —</div>
+
+        <div class="sync-section-title">方式二：已有同步码（其他设备连接）</div>
+        <input class="sync-input" id="existingGistInput" type="text" placeholder="粘贴同步码">
+        <button class="sync-btn sync-btn-secondary" onclick="connectExistingGist()">连接已有同步</button>
+      </div>
+    </div>
+
+    <!-- 已启用同步 -->
+    <div id="syncActiveSection" style="display:none">
+      <div class="sync-section">
+        <div class="sync-status-badge">
+          <div class="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#34c759;flex-shrink:0"></div>
+          <span id="syncStatusText">已启用云同步</span>
+        </div>
+        <div class="sync-code-label" style="font-size:12px;color:#8e8e93;margin-bottom:6px">你的同步码（在其他设备输入此码即可同步）</div>
+        <div class="sync-code-box">
+          <span class="sync-code-value" id="syncCodeDisplay"></span>
+          <button class="sync-copy-btn" onclick="copySyncCode()">复制</button>
+        </div>
+        <button class="sync-btn sync-btn-secondary" onclick="pullSync().then(closeSyncModal)">立即从云端拉取数据</button>
+        <button class="sync-btn sync-btn-danger" onclick="disableSync()">关闭同步</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TOAST ==================== -->
 <div class="toast" id="toast"></div>
+
+<!-- ==================== SYNC BAR ==================== -->
+<div class="sync-bar" id="syncBar">
+  <div class="sync-dot" id="syncDot"></div>
+  <span id="syncText">数据同步中...</span>
+</div>
+
+<!-- ==================== READER ==================== -->
+<div class="page" id="page-reader">
+  <div class="reader-header">
+    <div class="safe-top"></div>
+    <div class="navbar">
+      <button class="navbar-btn" onclick="goBack()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        书架
+      </button>
+      <div class="navbar-title" id="readerBookTitle"></div>
+      <button class="navbar-btn navbar-right" onclick="goReaderNotes()" style="font-size:14px;color:rgba(255,255,255,.85)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" style="vertical-align:middle">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        笔记
+      </button>
+    </div>
+  </div>
+  <div class="reader-body" id="readerBody"></div>
+</div>
 
 <script>
 /* ================================================
@@ -972,6 +1161,7 @@ function goBack() {
   if (currentPage === 'add-book') { showPage('bookshelf'); renderBookshelf(); }
   else if (currentPage === 'notes')     { showPage('bookshelf'); renderBookshelf(); }
   else if (currentPage === 'note-edit') { showPage('notes'); renderNotes(currentBookId); }
+  else if (currentPage === 'reader')    { showPage('bookshelf'); renderBookshelf(); }
 }
 
 /* ================================================
@@ -1026,9 +1216,9 @@ function renderBookshelf() {
       ? (book.finishTime ? `${book.startTime} ～ ${book.finishTime}` : `${book.startTime} 开始`)
       : '';
     return `
-      <div class="book-item" onclick="goNotes('${book.id}')">
-        <div class="book-cover-wrap">${coverHtml}</div>
-        <div class="book-info">
+      <div class="book-item">
+        <div class="book-cover-wrap" onclick="openReader('${book.id}')">${coverHtml}</div>
+        <div class="book-info" onclick="goNotes('${book.id}')">
           <div class="book-name">${escHtml(book.title)}</div>
           ${dateStr ? `<div class="book-dates">${dateStr}</div>` : ''}
         </div>
@@ -1053,7 +1243,219 @@ function goAddBook() {
 }
 
 /* ================================================
-   ADD BOOK
+   READER
+================================================ */
+let currentReaderBookId = null;
+
+function openReader(bookId) {
+  currentReaderBookId = bookId;
+  const books = getBooks();
+  const book = books.find(b => b.id === bookId) || {};
+  document.getElementById('readerBookTitle').textContent = book.title || '';
+
+  const body = document.getElementById('readerBody');
+
+  if (book.fileData && book.fileType === 'PDF') {
+    // PDF 用 iframe 内嵌显示
+    body.innerHTML = `<iframe class="reader-iframe" src="${book.fileData}" id="readerIframe"></iframe>`;
+  } else if (book.fileData && (book.fileType === 'Word')) {
+    // Word 无法直接渲染，提示下载
+    body.innerHTML = `
+      <div class="reader-no-file">
+        <div class="no-file-icon">📄</div>
+        <div class="no-file-title">Word 文档</div>
+        <div class="no-file-desc">《${escHtml(book.title)}》</div>
+        <div class="no-file-hint">Word 文档暂不支持在线预览<br>请使用 PDF 格式获得最佳体验</div>
+      </div>`;
+  } else {
+    body.innerHTML = `
+      <div class="reader-no-file">
+        <div class="no-file-icon">📚</div>
+        <div class="no-file-title">暂无电子书文件</div>
+        <div class="no-file-desc">《${escHtml(book.title)}》</div>
+        <div class="no-file-hint">添加书籍时上传 PDF 文件<br>即可在此处直接阅读</div>
+      </div>`;
+  }
+
+  currentBookId = bookId;
+  showPage('reader');
+}
+
+function goReaderNotes() {
+  goNotes(currentReaderBookId || currentBookId);
+}
+
+/* ================================================
+   CLOUD SYNC  (基于 GitHub Gist 免登录同步)
+================================================ */
+// 使用用户设备唯一ID + GitHub Gist 实现跨设备同步
+// 用户首次使用时生成同步码，其他设备输入同步码即可同步
+
+const SYNC_KEY = 'sss_sync_gist_id';
+const SYNC_TOKEN_KEY = 'sss_sync_token';
+
+function getDeviceId() {
+  let id = localStorage.getItem('sss_device_id');
+  if (!id) { id = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); localStorage.setItem('sss_device_id', id); }
+  return id;
+}
+
+// 显示同步设置界面
+function showSyncModal() {
+  const gistId = localStorage.getItem(SYNC_KEY);
+  const modal = document.getElementById('syncModal');
+  if (gistId) {
+    document.getElementById('syncCodeDisplay').textContent = gistId;
+    document.getElementById('syncStatusText').textContent = '已启用云同步';
+    document.getElementById('syncSetupSection').style.display = 'none';
+    document.getElementById('syncActiveSection').style.display = 'block';
+  } else {
+    document.getElementById('syncSetupSection').style.display = 'block';
+    document.getElementById('syncActiveSection').style.display = 'none';
+  }
+  modal.classList.add('show');
+}
+
+function closeSyncModal() {
+  document.getElementById('syncModal').classList.remove('show');
+}
+
+async function createSyncGist(token) {
+  const data = { books: getBooks(), notes: getNotes(), updatedAt: Date.now() };
+  try {
+    showSyncIndicator(true);
+    const res = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: '苏苏的书房 - 数据同步',
+        public: false,
+        files: { 'sss_data.json': { content: JSON.stringify(data) } }
+      })
+    });
+    if (!res.ok) throw new Error('创建失败');
+    const json = await res.json();
+    localStorage.setItem(SYNC_KEY, json.id);
+    localStorage.setItem(SYNC_TOKEN_KEY, token);
+    showSyncIndicator(false, '同步已启用');
+    return json.id;
+  } catch(e) {
+    showSyncIndicator(false);
+    showToast('创建同步失败，请检查 Token');
+    return null;
+  }
+}
+
+async function pushSync() {
+  const gistId = localStorage.getItem(SYNC_KEY);
+  const token = localStorage.getItem(SYNC_TOKEN_KEY);
+  if (!gistId || !token) return;
+  const data = { books: getBooks(), notes: getNotes(), updatedAt: Date.now() };
+  try {
+    showSyncIndicator(true);
+    await fetch(`https://api.github.com/gists/${gistId}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { 'sss_data.json': { content: JSON.stringify(data) } } })
+    });
+    showSyncIndicator(false, '已同步');
+  } catch(e) { showSyncIndicator(false); }
+}
+
+async function pullSync() {
+  const gistId = localStorage.getItem(SYNC_KEY);
+  if (!gistId) return;
+  try {
+    showSyncIndicator(true);
+    const res = await fetch(`https://api.github.com/gists/${gistId}`);
+    if (!res.ok) throw new Error();
+    const json = await res.json();
+    const content = json.files['sss_data.json']?.content;
+    if (!content) throw new Error();
+    const data = JSON.parse(content);
+    // 合并策略：以云端时间戳较新的为准
+    const localBooks = getBooks();
+    const remoteData = data;
+    // 简单策略：直接用云端数据（最后写入优先）
+    if (remoteData.books) saveBooks(remoteData.books);
+    if (remoteData.notes) saveNotes(remoteData.notes);
+    showSyncIndicator(false, '同步完成');
+    renderBookshelf();
+    showToast('数据已从云端同步 ✓');
+  } catch(e) {
+    showSyncIndicator(false);
+  }
+}
+
+async function connectExistingGist() {
+  const gistId = document.getElementById('existingGistInput').value.trim();
+  if (!gistId) { showToast('请输入同步码'); return; }
+  localStorage.setItem(SYNC_KEY, gistId);
+  document.getElementById('syncCodeDisplay').textContent = gistId;
+  document.getElementById('syncSetupSection').style.display = 'none';
+  document.getElementById('syncActiveSection').style.display = 'block';
+  document.getElementById('syncStatusText').textContent = '已启用云同步';
+  closeSyncModal();
+  await pullSync();
+}
+
+async function setupNewSync() {
+  const token = document.getElementById('githubTokenInput').value.trim();
+  if (!token) { showToast('请输入 GitHub Token'); return; }
+  const id = await createSyncGist(token);
+  if (id) {
+    document.getElementById('syncCodeDisplay').textContent = id;
+    document.getElementById('syncSetupSection').style.display = 'none';
+    document.getElementById('syncActiveSection').style.display = 'block';
+    document.getElementById('syncStatusText').textContent = '已启用云同步';
+    showToast('同步已启用，请保存同步码 ✓');
+  }
+}
+
+function disableSync() {
+  localStorage.removeItem(SYNC_KEY);
+  localStorage.removeItem(SYNC_TOKEN_KEY);
+  document.getElementById('syncSetupSection').style.display = 'block';
+  document.getElementById('syncActiveSection').style.display = 'none';
+  showToast('已关闭同步');
+}
+
+function copySyncCode() {
+  const code = localStorage.getItem(SYNC_KEY) || '';
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => showToast('同步码已复制 ✓')).catch(() => {
+    // fallback
+    const el = document.createElement('textarea');
+    el.value = code; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    showToast('同步码已复制 ✓');
+  });
+}
+
+function showSyncIndicator(syncing, msg) {
+  const bar = document.getElementById('syncBar');
+  const dot = document.getElementById('syncDot');
+  const text = document.getElementById('syncText');
+  if (syncing) {
+    dot.className = 'sync-dot syncing';
+    text.textContent = '同步中...';
+    bar.classList.add('show');
+  } else {
+    dot.className = 'sync-dot';
+    text.textContent = msg || '已同步';
+    bar.classList.add('show');
+    setTimeout(() => bar.classList.remove('show'), 2000);
+  }
+}
+
+// 页面加载时尝试拉取云端数据
+window.addEventListener('load', () => {
+  const gistId = localStorage.getItem(SYNC_KEY);
+  if (gistId) { setTimeout(pullSync, 1000); }
+});
+
+/* ================================================
+   SAVE BOOK (覆盖：保存时同步上传)
 ================================================ */
 function chooseCover() { document.getElementById('coverFileInput').click(); }
 function onCoverSelected(input) {
@@ -1077,6 +1479,12 @@ function onFileSelected(input) {
   const titleFromFile = file.name.replace(/\.[^.]+$/, '');
   window._addBookState.fileName = file.name;
   window._addBookState.fileType = fileType;
+
+  // 读取文件内容为 base64 DataURL，用于直接阅读
+  const reader = new FileReader();
+  reader.onload = e => { window._addBookState.fileData = e.target.result; };
+  reader.readAsDataURL(file);
+
   document.getElementById('fileNameDisplay').textContent = file.name;
   document.getElementById('fileNameDisplay').style.display = 'inline-block';
   document.getElementById('fileTypeBadge').textContent = fileType;
@@ -1101,13 +1509,17 @@ function saveBook() {
     coverUrl: state.coverUrl || '',
     fileName: state.fileName || '',
     fileType: state.fileType || '',
+    fileData: state.fileData || '',
     startTime: state.startTime,
     finishTime: state.finishTime || '',
     createTime: formatDateTime(new Date())
   });
   saveBooks(books);
   showToast('添加成功 ✓');
-  setTimeout(() => { showPage('bookshelf'); renderBookshelf(); }, 700);
+  setTimeout(() => {
+    showPage('bookshelf'); renderBookshelf();
+    pushSync();
+  }, 700);
 }
 
 /* ================================================
@@ -1256,7 +1668,7 @@ function saveNote() {
   saveNotes(allNotes);
   if (timeInterval) clearInterval(timeInterval);
   showToast(isEditNote ? '已更新 ✓' : '笔记已保存 ✓');
-  setTimeout(() => { showPage('notes'); renderNotes(currentBookId); }, 700);
+  setTimeout(() => { showPage('notes'); renderNotes(currentBookId); pushSync(); }, 700);
 }
 function cancelNoteEdit() {
   const content = document.getElementById('noteTextarea').value.trim();
@@ -1362,6 +1774,7 @@ function renderPickerLists() {
 
 function closeDatePicker() { document.getElementById('datePickerModal').classList.remove('show'); }
 function onPickerMaskClick(e) { if (e.target === document.getElementById('datePickerModal')) closeDatePicker(); }
+function onSyncMaskClick(e) { if (e.target === document.getElementById('syncModal')) closeSyncModal(); }
 
 function confirmDatePicker() {
   const dateStr = `${_pickerYears[_pickerSel[0]]}-${_pickerMonths[_pickerSel[1]]}-${_pickerDays[_pickerSel[2]]}`;
