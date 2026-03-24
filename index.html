@@ -1331,7 +1331,7 @@ async function onReaderUploadToCloud(input, bookId) {
   // 保存到书籍
   const books = getBooks();
   const idx = books.findIndex(b => b.id === bookId);
-  if (idx >= 0) { books[idx].fileUrl = url; saveBooks(books); pushSync(); }
+  if (idx >= 0) { books[idx].fileUrl = url; saveBooks(books); }
 
   showToast('上传成功，已永久保存 ✓');
   document.getElementById('readerBody').innerHTML =
@@ -1514,7 +1514,6 @@ function deleteBook(bookId) {
   toggleEditMode(false);
   showToast('已删除');
   renderBookshelf();
-  pushSync();
 }
 
 /* ================================================
@@ -1608,7 +1607,7 @@ function openReaderByUrl(bookId) {
   // 保存链接到书籍信息，下次直接打开
   const books = getBooks();
   const idx = books.findIndex(b => b.id === bookId);
-  if (idx >= 0) { books[idx].fileUrl = url; saveBooks(books); pushSync(); }
+  if (idx >= 0) { books[idx].fileUrl = url; saveBooks(books); }
   document.getElementById('readerBody').innerHTML =
     `<iframe class="reader-iframe" src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}" id="readerIframe"></iframe>`;
 }
@@ -1802,11 +1801,7 @@ function showSyncIndicator(syncing, msg) {
   }
 }
 
-// 页面加载时尝试拉取云端数据
-window.addEventListener('load', () => {
-  const gistId = localStorage.getItem(SYNC_KEY);
-  if (gistId) { setTimeout(pullSync, 1000); }
-});
+// 已禁用自动同步，仅支持手动同步
 
 /* ================================================
    SAVE BOOK (覆盖：保存时同步上传)
@@ -1897,7 +1892,6 @@ async function saveBook() {
   showToast('添加成功 ✓');
   setTimeout(() => {
     showPage('bookshelf'); renderBookshelf();
-    pushSync();
   }, 700);
 }
 
@@ -2047,7 +2041,7 @@ function saveNote() {
   saveNotes(allNotes);
   if (timeInterval) clearInterval(timeInterval);
   showToast(isEditNote ? '已更新 ✓' : '笔记已保存 ✓');
-  setTimeout(() => { showPage('notes'); renderNotes(currentBookId); pushSync(); }, 700);
+  setTimeout(() => { showPage('notes'); renderNotes(currentBookId); }, 700);
 }
 function cancelNoteEdit() {
   const content = document.getElementById('noteTextarea').value.trim();
