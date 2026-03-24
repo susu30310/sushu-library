@@ -1255,11 +1255,12 @@ function openReader(bookId) {
 
   const body = document.getElementById('readerBody');
 
-  if (book.fileData && book.fileType === 'PDF') {
-    // PDF 用 iframe 内嵌显示
-    body.innerHTML = `<iframe class="reader-iframe" src="${book.fileData}" id="readerIframe"></iframe>`;
-  } else if (book.fileData && (book.fileType === 'Word')) {
-    // Word 无法直接渲染，提示下载
+  // fileData 优先从内存中取（刚上传的），不存localStorage
+  const memData = window._sessionFileData && window._sessionFileData[bookId];
+
+  if (memData && book.fileType === 'PDF') {
+    body.innerHTML = `<iframe class="reader-iframe" src="${memData}" id="readerIframe"></iframe>`;
+  } else if (memData && book.fileType === 'Word') {
     body.innerHTML = `
       <div class="reader-no-file">
         <div class="no-file-icon">📄</div>
@@ -1273,7 +1274,7 @@ function openReader(bookId) {
         <div class="no-file-icon">📚</div>
         <div class="no-file-title">暂无电子书文件</div>
         <div class="no-file-desc">《${escHtml(book.title)}》</div>
-        <div class="no-file-hint">添加书籍时上传 PDF 文件<br>即可在此处直接阅读</div>
+        <div class="no-file-hint">文件仅在本次添加后可直接阅读<br>关闭页面后需重新上传文件</div>
       </div>`;
   }
 
@@ -1480,10 +1481,15 @@ function onFileSelected(input) {
   window._addBookState.fileName = file.name;
   window._addBookState.fileType = fileType;
 
-  // 读取文件内容为 base64 DataURL，用于直接阅读
-  const reader = new FileReader();
-  reader.onload = e => { window._addBookState.fileData = e.target.result; };
-  reader.readAsDataURL(file);
+  // 读取文件内容为 base64 DataURL，仅存在内存（会话级），不存 localStorage
+  if (fileType === 'PDF') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      // 用临时key存，保存书籍后再关联到bookId
+      window._addBookState._tempFileData = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
 
   document.getElementById('fileNameDisplay').textContent = file.name;
   document.getElementById('fileNameDisplay').style.display = 'inline-block';
@@ -1503,19 +1509,37 @@ function saveBook() {
   if (!state.startTime) { showToast('请选择开始阅读时间'); return; }
 
   const books = getBooks();
-  books.unshift({
+  const newBook = {
     id: Date.now().toString(),
     title,
     coverUrl: state.coverUrl || '',
     fileName: state.fileName || '',
     fileType: state.fileType || '',
-    fileData: state.fileData || '',
     startTime: state.startTime,
     finishTime: state.finishTime || '',
     createTime: formatDateTime(new Date())
-  });
-  saveBooks(books);
+    // 注意：fileData 不存入 localStorage（文件太大会超出5MB限制）
+  };
+  books.unshift(newBook);
+  try {
+    saveBooks(books);
+  } catch(e) {
+    // 如果封面图片太大也可能超限，尝试不保存封面
+    newBook.coverUrl = '';
+    books[0] = newBook;
+    try {
+      saveBooks(books);
+    } catch(e2) {
+      showToast('保存失败，存储空间不足');
+      return;
+    }
+  }
   showToast('添加成功 ✓');
+  // 将文件数据关联到bookId（仅本次会话有效，不存localStorage）
+  if (state._tempFileData) {
+    if (!window._sessionFileData) window._sessionFileData = {};
+    window._sessionFileData[newBook.id] = state._tempFileData;
+  }
   setTimeout(() => {
     showPage('bookshelf'); renderBookshelf();
     pushSync();
