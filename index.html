@@ -131,8 +131,8 @@
       -webkit-overflow-scrolling: touch;
     }
     .book-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 20px 12px;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 16px 10px;
     }
     .book-item {
       display: flex; flex-direction: column; align-items: center;
@@ -1335,7 +1335,7 @@ async function onReaderUploadToCloud(input, bookId) {
 
   showToast('上传成功，已永久保存 ✓');
   document.getElementById('readerBody').innerHTML =
-    `<iframe class="reader-iframe" src="${escHtml(url)}" id="readerIframe"></iframe>`;
+    `<iframe class="reader-iframe" src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}" id="readerIframe"></iframe>`;
 }
 
 </script>
@@ -1533,10 +1533,10 @@ function openReader(bookId) {
 
   if (memData) {
     // 本次会话已上传文件，直接显示
-    body.innerHTML = `<iframe class="reader-iframe" src="${memData}" id="readerIframe"></iframe>`;
+    body.innerHTML = `<iframe class="reader-iframe" src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(memData)}" id="readerIframe"></iframe>`;
   } else if (book.fileUrl) {
-    // 已保存在线链接，直接加载
-    body.innerHTML = `<iframe class="reader-iframe" src="${escHtml(book.fileUrl)}" id="readerIframe"></iframe>`;
+    // 已保存在线链接，使用 PDF.js 渲染（支持翻页）
+    body.innerHTML = `<iframe class="reader-iframe" src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(book.fileUrl)}" id="readerIframe"></iframe>`;
   } else {
     // 无文件，提供两种方式
     body.innerHTML = `
@@ -1610,7 +1610,7 @@ function openReaderByUrl(bookId) {
   const idx = books.findIndex(b => b.id === bookId);
   if (idx >= 0) { books[idx].fileUrl = url; saveBooks(books); pushSync(); }
   document.getElementById('readerBody').innerHTML =
-    `<iframe class="reader-iframe" src="${escHtml(url)}" id="readerIframe"></iframe>`;
+    `<iframe class="reader-iframe" src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(url)}" id="readerIframe"></iframe>`;
 }
 
 function onReaderFileSelected(input, bookId) {
@@ -1622,7 +1622,7 @@ function onReaderFileSelected(input, bookId) {
     if (!window._sessionFileData) window._sessionFileData = {};
     window._sessionFileData[bookId] = e.target.result;
     document.getElementById('readerBody').innerHTML =
-      `<iframe class="reader-iframe" src="${e.target.result}" id="readerIframe"></iframe>`;
+      `<iframe class="reader-iframe" src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(e.target.result)}" id="readerIframe"></iframe>`;
   };
   showToast('文件加载中...');
   reader.readAsDataURL(file);
@@ -1720,12 +1720,18 @@ async function pullSync() {
     const content = json.files['sss_data.json']?.content;
     if (!content) { showSyncIndicator(false); return; }
     const data = JSON.parse(content);
-    // 只有云端有数据时才覆盖本地，防止空数据覆盖
+    // 合并数据：以 id 为唯一键，本地优先（本地有的不覆盖）
+    const localBooks = getBooks();
+    const localIds = new Set(localBooks.map(b => b.id));
     if (data.books && data.books.length > 0) {
-      saveBooks(data.books);
+      // 云端有而本地没有的才补充进来
+      const merged = [...localBooks, ...data.books.filter(b => !localIds.has(b.id))];
+      saveBooks(merged);
     }
     if (data.notes && Object.keys(data.notes).length > 0) {
-      saveNotes(data.notes);
+      const localNotes = getNotes();
+      const mergedNotes = Object.assign({}, data.notes, localNotes); // 本地笔记优先
+      saveNotes(mergedNotes);
     }
     showSyncIndicator(false, '同步完成');
     if (currentPage === 'bookshelf') renderBookshelf();
