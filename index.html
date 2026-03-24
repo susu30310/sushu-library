@@ -1271,15 +1271,46 @@ function openReader(bookId) {
   } else {
     body.innerHTML = `
       <div class="reader-no-file">
-        <div class="no-file-icon">📚</div>
-        <div class="no-file-title">暂无电子书文件</div>
+        <div class="no-file-icon">📖</div>
+        <div class="no-file-title">选择文件开始阅读</div>
         <div class="no-file-desc">《${escHtml(book.title)}》</div>
-        <div class="no-file-hint">文件仅在本次添加后可直接阅读<br>关闭页面后需重新上传文件</div>
+        <div class="no-file-hint">由于浏览器存储限制，每次打开需重新选择文件</div>
+        <label class="reader-upload-btn" style="
+          display:inline-flex;align-items:center;gap:8px;
+          margin-top:24px;padding:14px 32px;border-radius:50px;cursor:pointer;
+          background:linear-gradient(135deg,#c9a96e,#e8c88a);
+          color:#1a1208;font-size:16px;font-weight:600;
+          box-shadow:0 6px 20px rgba(201,169,110,.4);
+        ">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          选择 PDF 文件
+          <input type="file" accept=".pdf" style="display:none" onchange="onReaderFileSelected(this,'${bookId}')">
+        </label>
       </div>`;
   }
 
   currentBookId = bookId;
   showPage('reader');
+}
+
+function onReaderFileSelected(input, bookId) {
+  const file = input.files[0]; if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext !== 'pdf') { showToast('请选择 PDF 文件'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (!window._sessionFileData) window._sessionFileData = {};
+    window._sessionFileData[bookId] = e.target.result;
+    // 直接渲染 iframe
+    document.getElementById('readerBody').innerHTML =
+      `<iframe class="reader-iframe" src="${e.target.result}" id="readerIframe"></iframe>`;
+  };
+  showToast('文件加载中...');
+  reader.readAsDataURL(file);
 }
 
 function goReaderNotes() {
