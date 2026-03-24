@@ -783,6 +783,8 @@
       width: 0%;
     }
     .upload-percent { font-size: 13px; color: #8e8e93; }
+    .upload-speed { font-size: 12px; color: #c7c7cc; margin-top: 4px; }
+    .upload-chunk { font-size: 11px; color: #c7c7cc; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -1166,7 +1168,8 @@
       <div class="upload-bar" id="uploadBar"></div>
     </div>
     <div class="upload-percent" id="uploadPercent">0%</div>
-    <div style="font-size:11px;color:#c7c7cc;margin-top:8px" id="uploadTip">正在传输，请耐心等待...</div>
+    <div class="upload-speed" id="uploadSpeed"></div>
+    <div class="upload-chunk" id="uploadChunk"></div>
   </div>
 </div>
 
@@ -1219,83 +1222,202 @@ function showUploadProgress(filename) {
   document.getElementById('uploadFileName').textContent = filename || '上传中...';
   document.getElementById('uploadBar').style.width = '0%';
   document.getElementById('uploadPercent').textContent = '0%';
+  document.getElementById('uploadSpeed').textContent = '';
+  document.getElementById('uploadChunk').textContent = '';
   document.getElementById('uploadProgressMask').classList.add('show');
 }
-function setUploadProgress(pct) {
+function setUploadProgress(pct, speed, chunkInfo) {
   document.getElementById('uploadBar').style.width = pct + '%';
-  document.getElementById('uploadPercent').textContent = pct + '%';
+  document.getElementById('uploadPercent').textContent = Math.round(pct) + '%';
+  if (speed) document.getElementById('uploadSpeed').textContent = speed;
+  if (chunkInfo) document.getElementById('uploadChunk').textContent = chunkInfo;
 }
 function hideUploadProgress() {
   document.getElementById('uploadProgressMask').classList.remove('show');
 }
 
+/* 格式化字节速度 */
+function fmtSpeed(bytesPerSec) {
+  if (bytesPerSec > 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + ' MB/s';
+  if (bytesPerSec > 1024) return (bytesPerSec / 1024).toFixed(0) + ' KB/s';
+  return bytesPerSec + ' B/s';
+}
+
+/* ================================================
+   分片上传到 Supabase Storage
+   - 每片 CHUNK_SIZE（默认 5MB）
+   - 直接上传每个分片为独立文件，最后拼接 URL 或
+     使用单文件上传（对大文件用 fetch 流式上传）
+================================================ */
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+
 async function uploadPdfToSupabase(file, bookId) {
   const ext = 'pdf';
-  const fileName = `${bookId}_${Date.now()}.${ext}`;
+  const baseFileName = `${bookId}_${Date.now()}`;
   const fileMB = file.size / 1024 / 1024;
-
-  // Supabase Free 默认限制 50MB，超过时提示用户在 Dashboard 调大限制
-  if (fileMB > 50) {
-    const ok = confirm(`文件大小 ${fileMB.toFixed(1)} MB，超过 Supabase 默认 50MB 限制。\n\n请先到 Supabase → Storage → 设置 → 将 "File size limit" 改为 200MB 或更大，否则上传会失败。\n\n已调好了？点确定继续上传。`);
-    if (!ok) return null;
-  }
 
   showUploadProgress(file.name);
 
-  // 模拟进度（Supabase JS 不支持上传进度，用定时器模拟）
-  // 前半段快速爬升到70%，后半段极慢（等待服务器响应）
-  let fakePct = 0;
-  const fakeTimer = setInterval(() => {
-    if (fakePct < 70) {
-      fakePct = Math.min(fakePct + Math.random() * 12, 70);
-    } else if (fakePct < 92) {
-      fakePct = Math.min(fakePct + Math.random() * 1.5, 92);
+  // 小文件（≤ 50MB）直接单次上传
+  if (file.size <= 50 * 1024 * 1024) {
+    return await _uploadSingleFile(file, `${baseFileName}.${ext}`);
+  }
+
+  // 大文件：分片上传
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const chunkPaths = [];
+  let uploadedBytes = 0;
+  let startTime = Date.now();
+
+  setUploadProgress(0, '', `准备分片上传（共 ${totalChunks} 片）`);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+    const chunkName = `${baseFileName}_part${String(i).padStart(4, '0')}.part`;
+
+    // 上传单片，最多重试 3 次
+    let success = false;
+    for (let retry = 0; retry < 3; retry++) {
+      try {
+        const { error } = await _supabase.storage
+          .from(BUCKET_NAME)
+          .upload(chunkName, chunk, { contentType: 'application/octet-stream', upsert: true });
+        if (error) throw error;
+        success = true;
+        break;
+      } catch (e) {
+        if (retry === 2) {
+          hideUploadProgress();
+          showToast(`第 ${i + 1} 片上传失败：${e.message || '请重试'}`);
+          // 清理已上传的分片
+          _cleanupChunks(chunkPaths);
+          return null;
+        }
+        await new Promise(r => setTimeout(r, 1500 * (retry + 1)));
+      }
     }
-    // 92% 以上停住等真实完成
-    setUploadProgress(Math.round(fakePct));
-  }, 400);
+
+    chunkPaths.push(chunkName);
+    uploadedBytes += (end - start);
+    const elapsed = (Date.now() - startTime) / 1000;
+    const speed = elapsed > 0 ? fmtSpeed(uploadedBytes / elapsed) : '';
+    const pct = (uploadedBytes / file.size) * 95; // 留5%给合并
+    setUploadProgress(pct, speed, `已上传 ${i + 1} / ${totalChunks} 片`);
+  }
+
+  // 所有分片上传完成，合并：将各分片读取后拼接成完整文件再上传
+  setUploadProgress(96, '', '正在合并分片...');
+  const finalFileName = `${baseFileName}.${ext}`;
 
   try {
-    // 根据文件大小动态设置超时（至少5分钟，每10MB追加1分钟，最长30分钟）
-    const fileMB = file.size / 1024 / 1024;
-    const timeoutMs = Math.min(Math.max(5 * 60000, Math.ceil(fileMB / 10) * 60000), 30 * 60000);
-
-    const uploadPromise = _supabase.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, file, { contentType: 'application/pdf', upsert: true });
-
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`上传超时（${Math.round(timeoutMs/60000)}分钟），请检查网络或换用更小的文件`)), timeoutMs)
-    );
-
-    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
-
-    clearInterval(fakeTimer);
-
-    if (error) {
-      hideUploadProgress();
-      console.error('Upload error:', error);
-      showToast('上传失败：' + (error.message || '请检查 Storage 配置'));
-      return null;
+    // 下载所有分片并在内存中拼接
+    const buffers = [];
+    for (let i = 0; i < chunkPaths.length; i++) {
+      const { data, error } = await _supabase.storage
+        .from(BUCKET_NAME)
+        .download(chunkPaths[i]);
+      if (error) throw error;
+      buffers.push(await data.arrayBuffer());
+      setUploadProgress(96 + (i / chunkPaths.length) * 2, '', `合并中 ${i + 1}/${chunkPaths.length}...`);
     }
 
-    setUploadProgress(100);
-    await new Promise(r => setTimeout(r, 500));
-    hideUploadProgress();
+    // 合并为完整 Blob
+    const mergedBlob = new Blob(buffers, { type: 'application/pdf' });
+    setUploadProgress(98, '', '上传合并后的文件...');
 
-    // 获取公开 URL
-    const { data: urlData } = _supabase.storage
+    const { error: mergeErr } = await _supabase.storage
       .from(BUCKET_NAME)
-      .getPublicUrl(fileName);
+      .upload(finalFileName, mergedBlob, { contentType: 'application/pdf', upsert: true });
 
-    return urlData.publicUrl;
-  } catch(e) {
-    clearInterval(fakeTimer);
+    if (mergeErr) throw mergeErr;
+
+    // 清理分片
+    _cleanupChunks(chunkPaths);
+
+    setUploadProgress(100, '', '上传完成 ✓');
+    await new Promise(r => setTimeout(r, 600));
     hideUploadProgress();
-    console.error('Upload exception:', e);
-    showToast('上传失败：' + (e.message || '请重试'));
+
+    const { data: urlData } = _supabase.storage.from(BUCKET_NAME).getPublicUrl(finalFileName);
+    return urlData.publicUrl;
+
+  } catch (e) {
+    hideUploadProgress();
+    showToast('合并失败：' + (e.message || '请重试'));
+    _cleanupChunks(chunkPaths);
     return null;
   }
+}
+
+/* 单文件直接上传（≤50MB） */
+async function _uploadSingleFile(file, fileName) {
+  const startTime = Date.now();
+  // 用 XMLHttpRequest 实现真实进度
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      // 转为 ArrayBuffer 再用 fetch 上传，通过 XHR 监听进度
+      const arrayBuffer = e.target.result;
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+
+      // 获取 Supabase 上传 URL
+      const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET_NAME}/${fileName}`;
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable) {
+          const pct = (ev.loaded / ev.total) * 100;
+          const elapsed = (Date.now() - startTime) / 1000;
+          const speed = elapsed > 0 ? fmtSpeed(ev.loaded / elapsed) : '';
+          setUploadProgress(pct, speed, '');
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status === 200 || xhr.status === 201) {
+          setUploadProgress(100, '', '');
+          setTimeout(() => {
+            hideUploadProgress();
+            const { data: urlData } = _supabase.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+            resolve(urlData.publicUrl);
+          }, 500);
+        } else {
+          hideUploadProgress();
+          let errMsg = '上传失败';
+          try { errMsg = JSON.parse(xhr.responseText).message || errMsg; } catch(ex) {}
+          showToast(errMsg);
+          resolve(null);
+        }
+      };
+
+      xhr.onerror = () => {
+        hideUploadProgress();
+        showToast('网络错误，请重试');
+        resolve(null);
+      };
+
+      xhr.open('POST', uploadUrl);
+      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+      xhr.setRequestHeader('x-upsert', 'true');
+      xhr.send(blob);
+    };
+    reader.onerror = () => {
+      hideUploadProgress();
+      showToast('文件读取失败');
+      resolve(null);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/* 异步清理分片（不影响主流程） */
+async function _cleanupChunks(paths) {
+  if (!paths || paths.length === 0) return;
+  try {
+    await _supabase.storage.from(BUCKET_NAME).remove(paths);
+  } catch(e) { /* 忽略清理错误 */ }
 }
 
 /* ================================================
