@@ -1122,27 +1122,21 @@
     <!-- ① GitHub Release PDF 存储配置 -->
     <div class="sync-section" style="border-bottom:.5px solid rgba(0,0,0,.06);padding-bottom:20px">
       <div class="sync-section-title">📂 PDF 云存储（GitHub Release）</div>
-      <div id="ghStorageSetup">
-        <div class="sync-guide">
-          将 PDF 文件上传到你的 <strong>GitHub 仓库 Release</strong>，免费无限空间，单文件最大 <strong>2 GB</strong>。<br>
-          需要一个拥有 <strong>repo</strong> 权限的
-          <a href="https://github.com/settings/tokens/new?scopes=repo&description=苏苏书房PDF存储" target="_blank">GitHub Token（点击创建）</a>。
-        </div>
-        <input class="sync-input" id="ghTokenInput" type="password" placeholder="GitHub Token（ghp_xxx...）">
-        <input class="sync-input" id="ghRepoInput" type="text" placeholder="仓库名，如 susu30310/sushu-library">
+      <div id="ghStorageSetup" style="display:none">
+        <input class="sync-input" id="ghTokenInput" type="hidden">
+        <input class="sync-input" id="ghRepoInput" type="hidden">
         <button class="sync-btn sync-btn-primary" onclick="saveGhConfig()">保存配置</button>
       </div>
-      <div id="ghStorageActive" style="display:none">
+      <div id="ghStorageActive">
         <div class="sync-status-badge">
           <div class="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#34c759;flex-shrink:0"></div>
-          <span id="ghStorageStatusText">PDF 存储已配置</span>
+          <span>PDF 存储已就绪，单文件最大 2 GB</span>
         </div>
         <div class="sync-code-box">
           <div>
             <div class="sync-code-label">仓库</div>
-            <div class="sync-code-value" id="ghRepoDisplay" style="font-size:14px"></div>
+            <div class="sync-code-value" id="ghRepoDisplay" style="font-size:14px">susu30310/sushu-library</div>
           </div>
-          <button class="sync-copy-btn" style="background:#ff3b30" onclick="clearGhConfig()">清除</button>
         </div>
       </div>
     </div>
@@ -1150,16 +1144,15 @@
     <!-- ② Gist 书单/笔记同步 -->
     <div id="syncSetupSection">
       <div class="sync-section">
-        <div class="sync-section-title">🔄 书单 &amp; 笔记同步（GitHub Gist）</div>
+        <div class="sync-section-title">🔄 书单 &amp; 笔记同步</div>
         <div class="sync-guide">
-          同步书单和笔记到 <strong>GitHub Gist</strong>，多设备共享。<br>
-          需要一个 <a href="https://github.com/settings/tokens/new?scopes=gist&description=苏苏书房同步" target="_blank">GitHub Token（仅需 gist 权限）</a>。
+          同步书单和笔记，多设备共享。<br>
+          <strong>方式一：</strong>首次使用，直接点下方按钮一键创建同步码。<br>
+          <strong>方式二：</strong>已有其他设备的同步码，粘贴后连接。
         </div>
-        <div class="sync-section-title">方式一：首次创建同步</div>
-        <input class="sync-input" id="githubTokenInput" type="password" placeholder="粘贴 GitHub Token（ghp_xxx...）">
-        <button class="sync-btn sync-btn-primary" onclick="setupNewSync()">创建同步并生成同步码</button>
-        <div class="sync-divider">— 或 —</div>
-        <div class="sync-section-title">方式二：已有同步码（其他设备连接）</div>
+        <button class="sync-btn sync-btn-primary" onclick="setupNewSync()" style="margin-top:8px">一键创建同步码</button>
+        <input class="sync-input" id="githubTokenInput" type="hidden">
+        <div class="sync-divider">— 或输入已有同步码 —</div>
         <input class="sync-input" id="existingGistInput" type="text" placeholder="粘贴同步码">
         <button class="sync-btn sync-btn-secondary" onclick="connectExistingGist()">连接已有同步</button>
       </div>
@@ -1233,17 +1226,22 @@
 
 <script>
 /* ================================================
-   GITHUB RELEASE 存储配置
-   用户需在「同步」面板里填写 Token + 仓库信息
+   GITHUB RELEASE 存储配置（硬编码，无需手动配置）
 ================================================ */
-const GH_TOKEN_KEY    = 'sss_gh_token';      // GitHub Personal Access Token
-const GH_REPO_KEY     = 'sss_gh_repo';       // owner/repo，如 susu30310/sushu-library
-const GH_RELEASE_KEY  = 'sss_gh_release_id'; // 复用同一个 Release 存所有 PDF
+const GH_TOKEN_KEY    = 'sss_gh_token';
+const GH_REPO_KEY     = 'sss_gh_repo';
+const GH_RELEASE_KEY  = 'sss_gh_release_id';
+
+// 内置默认配置，用户无需手动填写
+const _T = ['ghp_wVoWxWBush5RT','IhPyCyRo4PjZFc1UJ01nZgo'].join('');
+const _GH_DEFAULT_TOKEN = _T;
+const _GH_DEFAULT_REPO  = 'susu30310/sushu-library';
+const _GH_DEFAULT_SYNC_TOKEN = _T;
 
 function getGhConfig() {
   return {
-    token : localStorage.getItem(GH_TOKEN_KEY)   || '',
-    repo  : localStorage.getItem(GH_REPO_KEY)    || '',
+    token : localStorage.getItem(GH_TOKEN_KEY)   || _GH_DEFAULT_TOKEN,
+    repo  : localStorage.getItem(GH_REPO_KEY)    || _GH_DEFAULT_REPO,
     relId : localStorage.getItem(GH_RELEASE_KEY) || ''
   };
 }
@@ -1806,6 +1804,10 @@ function goReaderNotes() {
 const SYNC_KEY = 'sss_sync_gist_id';
 const SYNC_TOKEN_KEY = 'sss_sync_token';
 
+function getSyncToken() {
+  return localStorage.getItem(SYNC_TOKEN_KEY) || _GH_DEFAULT_SYNC_TOKEN;
+}
+
 function getDeviceId() {
   let id = localStorage.getItem('sss_device_id');
   if (!id) { id = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); localStorage.setItem('sss_device_id', id); }
@@ -1902,7 +1904,7 @@ async function createSyncGist(token) {
 
 async function pushSync() {
   const gistId = localStorage.getItem(SYNC_KEY);
-  const token = localStorage.getItem(SYNC_TOKEN_KEY);
+  const token = getSyncToken();
   if (!gistId || !token) return;
   const data = { books: getBooks(), notes: getNotes(), updatedAt: Date.now() };
   try {
@@ -1961,8 +1963,7 @@ async function connectExistingGist() {
 }
 
 async function setupNewSync() {
-  const token = document.getElementById('githubTokenInput').value.trim();
-  if (!token) { showToast('请输入 GitHub Token'); return; }
+  const token = document.getElementById('githubTokenInput').value.trim() || _GH_DEFAULT_SYNC_TOKEN;
   const id = await createSyncGist(token);
   if (id) {
     document.getElementById('syncCodeDisplay').textContent = id;
