@@ -1301,9 +1301,69 @@ function fmtSpeed(bytesPerSec) {
    2. 用 XHR 上传文件到 Release Assets（支持真实进度）
    3. 返回文件的 browser_download_url
 ================================================ */
+const SERVER_URL_KEY = 'sss_server_url';
+const _DEFAULT_SERVER_URL = 'http://124.223.49.181:3000';
+
 async function uploadPdfToSupabase(file, bookId) {
-  // 函数名保留兼容性，实际上传到 GitHub Release
-  return await uploadPdfToGithub(file, bookId);
+  // 优先上传到自己的服务器
+  const serverUrl = localStorage.getItem(SERVER_URL_KEY) || _DEFAULT_SERVER_URL;
+  return await uploadPdfToServer(file, bookId, serverUrl);
+}
+
+/* 直接上传到自己的服务器 */
+function uploadPdfToServer(file, bookId, serverUrl) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const safeFileName = `${bookId}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const url = `${serverUrl.replace(/\/$/, '')}/api/upload?name=${encodeURIComponent(safeFileName)}`;
+
+    showUploadProgress(file.name);
+    setUploadProgress(0, '', '准备上传...');
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) {
+        const pct = 2 + (ev.loaded / ev.total) * 96;
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = elapsed > 0.5 ? fmtSpeed(ev.loaded / elapsed) : '';
+        const mb = (ev.loaded / 1024 / 1024).toFixed(1);
+        const total = (ev.total / 1024 / 1024).toFixed(1);
+        setUploadProgress(pct, speed, `${mb} / ${total} MB`);
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status === 200) {
+        setUploadProgress(100, '', '上传完成 ✓');
+        await new Promise(r => setTimeout(r, 600));
+        hideUploadProgress();
+        try {
+          const res = JSON.parse(xhr.responseText);
+          resolve(res.url);
+        } catch(e) { reject(new Error('解析响应失败')); }
+      } else {
+        hideUploadProgress();
+        let msg = `上传失败 (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch(ex) {}
+        showToast(msg);
+        reject(new Error(msg));
+      }
+    };
+
+    xhr.onerror = () => {
+      hideUploadProgress();
+      showToast('连接服务器失败，请检查网络');
+      reject(new Error('网络错误'));
+    };
+
+    xhr.timeout = 2 * 60 * 60 * 1000;
+    xhr.ontimeout = () => { hideUploadProgress(); reject(new Error('上传超时')); };
+
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.send(file);
+  });
 }
 
 async function uploadPdfToGithub(file, bookId) {
