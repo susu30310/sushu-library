@@ -1369,63 +1369,80 @@ async function _ensureRelease(cfg) {
   return String(created.id);
 }
 
-/* 用 XHR 上传文件到 Release，支持真实进度条 */
-function _uploadAssetXHR(cfg, releaseId, file, fileName) {
-  return new Promise((resolve, reject) => {
-    const startTime = Date.now();
-    const uploadUrl =
-      `https://uploads.github.com/repos/${cfg.repo}/releases/${releaseId}/assets?name=${encodeURIComponent(fileName)}`;
+/* 通过 GitHub Contents API 上传文件（支持 CORS，适合浏览器端） */
+async function _uploadAssetXHR(cfg, releaseId, file, fileName) {
+  const MAX_MB = 49;
+  if (file.size > MAX_MB * 1024 * 1024) {
+    hideUploadProgress();
+    showToast(`文件超过 ${MAX_MB}MB 限制，请压缩后再试`);
+    throw new Error('文件过大');
+  }
 
-    const xhr = new XMLHttpRequest();
+  setUploadProgress(5, '', '读取文件...');
 
-    xhr.upload.onprogress = (ev) => {
-      if (ev.lengthComputable) {
-        const pct = 2 + (ev.loaded / ev.total) * 96;
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = elapsed > 0.5 ? fmtSpeed(ev.loaded / elapsed) : '';
-        const mb = (ev.loaded / 1024 / 1024).toFixed(1);
-        const total = (ev.total / 1024 / 1024).toFixed(1);
-        setUploadProgress(pct, speed, `${mb} / ${total} MB`);
-      }
+  // 将文件转为 base64
+  const base64Content = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // result 是 "data:application/pdf;base64,XXXX"，取逗号后面的部分
+      const b64 = reader.result.split(',')[1];
+      resolve(b64);
     };
-
-    xhr.onload = async () => {
-      if (xhr.status === 201) {
-        setUploadProgress(100, '', '上传完成 ✓');
-        await new Promise(r => setTimeout(r, 600));
-        hideUploadProgress();
-        try {
-          const asset = JSON.parse(xhr.responseText);
-          resolve(asset.browser_download_url);
-        } catch(e) { reject(new Error('解析响应失败')); }
-      } else {
-        hideUploadProgress();
-        let msg = `上传失败 (${xhr.status})`;
-        try { msg = JSON.parse(xhr.responseText).message || msg; } catch(ex) {}
-        // 413 说明文件太大（GitHub Release 单文件上限 2GB，一般不会触发）
-        if (xhr.status === 422) msg = '文件名已存在或参数错误，请重试';
-        showToast(msg);
-        reject(new Error(msg));
-      }
-    };
-
-    xhr.onerror = () => {
-      hideUploadProgress();
-      reject(new Error('网络错误，请检查网络后重试'));
-    };
-
-    xhr.ontimeout = () => {
-      hideUploadProgress();
-      reject(new Error('上传超时，请重试'));
-    };
-
-    xhr.timeout = 60 * 60 * 1000; // 最长 1 小时
-    xhr.open('POST', uploadUrl);
-    xhr.setRequestHeader('Authorization', `token ${cfg.token}`);
-    xhr.setRequestHeader('Accept', 'application/vnd.github+json');
-    xhr.setRequestHeader('Content-Type', 'application/pdf');
-    xhr.send(file);
+    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.readAsDataURL(file);
   });
+
+  setUploadProgress(30, '', '上传中...');
+
+  const filePath = `books/${fileName}`;
+  const apiUrl = `https://api.github.com/repos/${cfg.repo}/contents/${filePath}`;
+
+  // 先检查文件是否已存在（获取 sha）
+  let sha = null;
+  try {
+    const checkRes = await fetch(apiUrl, {
+      headers: { 'Authorization': `token ${cfg.token}`, 'Accept': 'application/vnd.github+json' }
+    });
+    if (checkRes.ok) {
+      const existing = await checkRes.json();
+      sha = existing.sha;
+    }
+  } catch(e) {}
+
+  setUploadProgress(50, '', '上传中...');
+
+  const body = {
+    message: `上传书籍: ${file.name}`,
+    content: base64Content,
+    branch: 'main'
+  };
+  if (sha) body.sha = sha;
+
+  const res = await fetch(apiUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `token ${cfg.token}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const msg = errBody.message || `上传失败 (${res.status})`;
+    hideUploadProgress();
+    showToast(msg);
+    throw new Error(msg);
+  }
+
+  const result = await res.json();
+  setUploadProgress(100, '', '上传完成 ✓');
+  await new Promise(r => setTimeout(r, 600));
+  hideUploadProgress();
+
+  // 返回 raw 内容地址
+  return `https://raw.githubusercontent.com/${cfg.repo}/main/${filePath}`;
 }
 
 /* 异步清理（兼容旧代码调用，此处为空操作） */
