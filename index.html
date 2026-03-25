@@ -1121,7 +1121,7 @@
 
     <!-- ① GitHub Release PDF 存储配置 -->
     <div class="sync-section" style="border-bottom:.5px solid rgba(0,0,0,.06);padding-bottom:20px">
-      <div class="sync-section-title">📂 PDF 云存储（GitHub Release）</div>
+      <div class="sync-section-title">📂 PDF 云存储</div>
       <div id="ghStorageSetup" style="display:none">
         <input class="sync-input" id="ghTokenInput" type="hidden">
         <input class="sync-input" id="ghRepoInput" type="hidden">
@@ -1130,7 +1130,7 @@
       <div id="ghStorageActive">
         <div class="sync-status-badge">
           <div class="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#34c759;flex-shrink:0"></div>
-          <span>PDF 存储已就绪，单文件最大 2 GB</span>
+          <span>小文件（&lt;49MB）直接上传，大文件需配置代理</span>
         </div>
         <div class="sync-code-box">
           <div>
@@ -1138,6 +1138,26 @@
             <div class="sync-code-value" id="ghRepoDisplay" style="font-size:14px">susu30310/sushu-library</div>
           </div>
         </div>
+        <!-- 大文件代理配置 -->
+        <details style="margin-top:12px">
+          <summary style="font-size:13px;color:#007aff;cursor:pointer;user-select:none">📦 大文件支持（&gt;49MB，最大 2GB）</summary>
+          <div style="margin-top:10px;font-size:13px;color:#666;line-height:1.7">
+            需部署一个免费 Cloudflare Worker 作为代理：<br>
+            1. 打开 <a href="https://workers.cloudflare.com/" target="_blank" style="color:#007aff">workers.cloudflare.com</a> 注册/登录（免费）<br>
+            2. 点击「Create a Worker」，将代码粘贴进去保存<br>
+            3. &nbsp;&nbsp;&nbsp;<a id="copyWorkerCodeBtn" href="javascript:void(0)" onclick="copyWorkerCode()" style="color:#007aff">📋 点击复制 Worker 代码</a><br>
+            4. 复制 Worker 的 URL，填入下方输入框
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input class="sync-input" id="workerUrlInput" type="text"
+              placeholder="https://xxx.workers.dev"
+              style="margin:0;flex:1"
+              value=""
+              oninput="this.value=this.value.trim()">
+            <button class="sync-btn sync-btn-primary" style="margin:0;white-space:nowrap" onclick="saveWorkerUrl()">保存</button>
+          </div>
+          <div id="workerUrlStatus" style="font-size:12px;color:#8e8e93;margin-top:4px"></div>
+        </details>
       </div>
     </div>
 
@@ -1231,6 +1251,7 @@
 const GH_TOKEN_KEY    = 'sss_gh_token';
 const GH_REPO_KEY     = 'sss_gh_repo';
 const GH_RELEASE_KEY  = 'sss_gh_release_id';
+const GH_WORKER_KEY   = 'sss_gh_worker_url';
 
 // 内置默认配置，用户无需手动填写
 const _T = ['ghp_7iou38Fh6CqFqkYmY4pX','Hqi1ArUa4r3nhAGb'].join('');
@@ -1240,9 +1261,10 @@ const _GH_DEFAULT_SYNC_TOKEN = _T;
 
 function getGhConfig() {
   return {
-    token : localStorage.getItem(GH_TOKEN_KEY)   || _GH_DEFAULT_TOKEN,
-    repo  : localStorage.getItem(GH_REPO_KEY)    || _GH_DEFAULT_REPO,
-    relId : localStorage.getItem(GH_RELEASE_KEY) || ''
+    token     : localStorage.getItem(GH_TOKEN_KEY)   || _GH_DEFAULT_TOKEN,
+    repo      : localStorage.getItem(GH_REPO_KEY)    || _GH_DEFAULT_REPO,
+    relId     : localStorage.getItem(GH_RELEASE_KEY) || '',
+    workerUrl : localStorage.getItem(GH_WORKER_KEY)  || ''
   };
 }
 
@@ -1369,53 +1391,53 @@ async function _ensureRelease(cfg) {
   return String(created.id);
 }
 
-/* 通过 GitHub Contents API 上传文件（支持 CORS，适合浏览器端） */
+/* 上传入口：小文件用 Contents API，大文件走 Worker 代理到 GitHub Release */
 async function _uploadAssetXHR(cfg, releaseId, file, fileName) {
-  const MAX_MB = 49;
-  if (file.size > MAX_MB * 1024 * 1024) {
-    hideUploadProgress();
-    showToast(`文件超过 ${MAX_MB}MB 限制，请压缩后再试`);
-    throw new Error('文件过大');
-  }
+  const SMALL_LIMIT = 49 * 1024 * 1024; // 49MB
 
+  if (file.size <= SMALL_LIMIT) {
+    // ── 小文件：GitHub Contents API（支持 CORS，无需代理）──
+    return await _uploadViaContentsApi(cfg, file, fileName);
+  } else {
+    // ── 大文件：必须通过 Cloudflare Worker 代理 ──
+    if (!cfg.workerUrl) {
+      hideUploadProgress();
+      showToast('文件超过 49MB，需配置上传代理地址，请点击同步面板查看说明');
+      showSyncModal();
+      throw new Error('需要配置 Worker 代理');
+    }
+    return await _uploadViaWorkerProxy(cfg, releaseId, file, fileName);
+  }
+}
+
+/* ── 小文件：Base64 + GitHub Contents API ── */
+async function _uploadViaContentsApi(cfg, file, fileName) {
   setUploadProgress(5, '', '读取文件...');
 
-  // 将文件转为 base64
   const base64Content = await new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      // result 是 "data:application/pdf;base64,XXXX"，取逗号后面的部分
-      const b64 = reader.result.split(',')[1];
-      resolve(b64);
-    };
+    reader.onload = () => resolve(reader.result.split(',')[1]);
     reader.onerror = () => reject(new Error('读取文件失败'));
     reader.readAsDataURL(file);
   });
 
-  setUploadProgress(30, '', '上传中...');
+  setUploadProgress(20, '', '上传中...');
 
   const filePath = `books/${fileName}`;
   const apiUrl = `https://api.github.com/repos/${cfg.repo}/contents/${filePath}`;
 
-  // 先检查文件是否已存在（获取 sha）
+  // 检查是否已存在（获取 sha 以便覆盖）
   let sha = null;
   try {
     const checkRes = await fetch(apiUrl, {
       headers: { 'Authorization': `token ${cfg.token}`, 'Accept': 'application/vnd.github+json' }
     });
-    if (checkRes.ok) {
-      const existing = await checkRes.json();
-      sha = existing.sha;
-    }
+    if (checkRes.ok) sha = (await checkRes.json()).sha;
   } catch(e) {}
 
-  setUploadProgress(50, '', '上传中...');
+  setUploadProgress(40, '', '上传中...');
 
-  const body = {
-    message: `上传书籍: ${file.name}`,
-    content: base64Content,
-    branch: 'main'
-  };
+  const body = { message: `上传书籍: ${file.name}`, content: base64Content, branch: 'main' };
   if (sha) body.sha = sha;
 
   const res = await fetch(apiUrl, {
@@ -1436,13 +1458,71 @@ async function _uploadAssetXHR(cfg, releaseId, file, fileName) {
     throw new Error(msg);
   }
 
-  const result = await res.json();
+  await res.json();
   setUploadProgress(100, '', '上传完成 ✓');
   await new Promise(r => setTimeout(r, 600));
   hideUploadProgress();
-
-  // 返回 raw 内容地址
   return `https://raw.githubusercontent.com/${cfg.repo}/main/${filePath}`;
+}
+
+/* ── 大文件：通过 Cloudflare Worker 代理上传到 GitHub Release ── */
+function _uploadViaWorkerProxy(cfg, releaseId, file, fileName) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const targetUrl =
+      `https://uploads.github.com/repos/${cfg.repo}/releases/${releaseId}/assets?name=${encodeURIComponent(fileName)}`;
+    // Worker URL 形如 https://xxx.workers.dev，加上 ?target=... 参数
+    const proxyUrl = `${cfg.workerUrl.replace(/\/$/, '')}?target=${encodeURIComponent(targetUrl)}`;
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) {
+        const pct = 2 + (ev.loaded / ev.total) * 96;
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = elapsed > 0.5 ? fmtSpeed(ev.loaded / elapsed) : '';
+        const mb = (ev.loaded / 1024 / 1024).toFixed(1);
+        const total = (ev.total / 1024 / 1024).toFixed(1);
+        setUploadProgress(pct, speed, `${mb} / ${total} MB`);
+      }
+    };
+
+    xhr.onload = async () => {
+      if (xhr.status === 201) {
+        setUploadProgress(100, '', '上传完成 ✓');
+        await new Promise(r => setTimeout(r, 600));
+        hideUploadProgress();
+        try {
+          const asset = JSON.parse(xhr.responseText);
+          resolve(asset.browser_download_url);
+        } catch(e) { reject(new Error('解析响应失败')); }
+      } else {
+        hideUploadProgress();
+        let msg = `上传失败 (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).message || msg; } catch(ex) {}
+        if (xhr.status === 422) msg = '文件名已存在，请重试（文件名会自动加时间戳）';
+        showToast(msg);
+        reject(new Error(msg));
+      }
+    };
+
+    xhr.onerror = () => {
+      hideUploadProgress();
+      reject(new Error('代理上传网络错误，请检查 Worker 地址是否正确'));
+    };
+
+    xhr.ontimeout = () => {
+      hideUploadProgress();
+      reject(new Error('上传超时，请重试'));
+    };
+
+    xhr.timeout = 2 * 60 * 60 * 1000; // 最长 2 小时
+    xhr.open('POST', proxyUrl);
+    xhr.setRequestHeader('Authorization', `token ${cfg.token}`);
+    xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+    xhr.setRequestHeader('Content-Type', 'application/pdf');
+    xhr.send(file);
+  });
 }
 
 /* 异步清理（兼容旧代码调用，此处为空操作） */
@@ -1886,7 +1966,84 @@ function showSyncModal() {
     document.getElementById('syncActiveSection').style.display = 'none';
   }
   _renderGhStorageStatus();
+  // 回填已保存的 Worker URL
+  const workerInput = document.getElementById('workerUrlInput');
+  if (workerInput) {
+    workerInput.value = localStorage.getItem(GH_WORKER_KEY) || '';
+  }
+  _updateWorkerStatus();
   modal.classList.add('show');
+}
+
+function saveWorkerUrl() {
+  const input = document.getElementById('workerUrlInput');
+  const url = (input ? input.value.trim() : '');
+  if (url && !url.startsWith('https://')) {
+    showToast('Worker 地址必须以 https:// 开头');
+    return;
+  }
+  if (url) {
+    localStorage.setItem(GH_WORKER_KEY, url);
+    showToast('代理地址已保存，现在可以上传大文件了');
+  } else {
+    localStorage.removeItem(GH_WORKER_KEY);
+    showToast('已清除代理地址');
+  }
+  _updateWorkerStatus();
+}
+
+function _updateWorkerStatus() {
+  const el = document.getElementById('workerUrlStatus');
+  if (!el) return;
+  const saved = localStorage.getItem(GH_WORKER_KEY);
+  el.textContent = saved ? `✅ 已配置：${saved}` : '未配置（仅支持 49MB 以下文件）';
+  el.style.color = saved ? '#34c759' : '#8e8e93';
+}
+
+/* Worker 代码字符串，供用户复制到 Cloudflare */
+const _WORKER_CODE = `export default {
+  async fetch(request, env) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+    if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+    const url = new URL(request.url);
+    const targetUrl = url.searchParams.get('target');
+    if (!targetUrl || !targetUrl.startsWith('https://uploads.github.com/')) {
+      return new Response('Bad Request', { status: 400 });
+    }
+    const upstream = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': request.headers.get('Authorization') || '',
+        'Accept': request.headers.get('Accept') || 'application/vnd.github+json',
+        'Content-Type': request.headers.get('Content-Type') || 'application/octet-stream',
+      },
+      body: request.body,
+    });
+    const body = await upstream.arrayBuffer();
+    return new Response(body, {
+      status: upstream.status,
+      headers: { ...Object.fromEntries(upstream.headers.entries()), ...corsHeaders() },
+    });
+  },
+};
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept',
+  };
+}`;
+
+function copyWorkerCode() {
+  navigator.clipboard.writeText(_WORKER_CODE).then(() => {
+    showToast('Worker 代码已复制，去 Cloudflare 粘贴吧');
+    const btn = document.getElementById('copyWorkerCodeBtn');
+    if (btn) btn.textContent = '✅ 已复制';
+  }).catch(() => {
+    showToast('复制失败，请手动复制');
+  });
 }
 
 function closeSyncModal() {
